@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ko" data-stealth="off">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'; upgrade-insecure-requests">
+  <meta name="referrer" content="no-referrer" />
+  <title>Ops Console — Task Monitor</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#0f172a; --soft:#111827; --line:#1f2937; --muted:#9ca3af; --text:#e5e7eb; --accent:#60a5fa; --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+      --radius:14px; --shadow:0 8px 30px rgba(0,0,0,.35); --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 1200px at 80% -10%, #12223a 0%, #0b0f14 60%), var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,Segoe UI,Apple SD Gothic Neo,Apple Color Emoji,Segoe UI Emoji}
+    a{color:var(--accent);text-decoration:none}
+    .app{display:grid;grid-template-columns:240px 1fr;min-height:100%}
+    .side{background:linear-gradient(180deg,#0e1524,#0a0f19);border-right:1px solid #101827;padding:15px;position:sticky;top:0;height:100vh}
+    .brand{display:flex;gap:10px;align-items:center;margin-bottom:18px}
+    .brand .logo{width:10px;height:20px;border-radius:8px;background:linear-gradient(135deg,#1f3b6e,#0ea5e9);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+    .brand h1{font-size:14px;letter-spacing:.3px;margin:0;color:#dbeafe}
+    .nav{display:grid;gap:8px}
+    .nav a{padding:8px 10px;border-radius:10px;color:#cbd5e1;background:transparent;border:1px solid transparent}
+    .nav a.active,.nav a:hover{background:#0b1220;border-color:#1f2937}
+
+    .main{display:flex;flex-direction:column}
+    .topbar{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #111827;background:rgba(10,15,24,.6);backdrop-filter: blur(6px);position:sticky;top:0;z-index:5}
+    .topbar .title{font-weight:600;color:#e5e7eb}
+    .meta{display:flex;gap:12px;color:#a5b4fc;font-size:12px}
+    .stealth-toggle{appearance:none;padding:8px 10px;border-radius:10px;border:1px solid #243042;background:#0b1220;color:#cbd5e1;cursor:pointer}
+
+    .wrap{max-width:1100px;margin:10px auto;padding:0 18px;display:grid;grid-template-columns:1.2fr .8fr;gap:18px;align-items:start}
+    .card{background:linear-gradient(180deg,#0f172a,#0b1220);border:1px solid #1f2937;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .card h2{margin:0;font-size:14px;padding:12px 14px;border-bottom:1px solid #1f2937;color:#cbd5e1;letter-spacing:.2px}
+    .card .body{padding:14px}
+
+    .grid{display:grid;gap:10px}
+    .row{display:flex;gap:10px;align-items:center}
+    .row > *{flex:1}
+    .input{text-align:center;width:80%;padding:10px 10px;border-radius:10px;background:#0b1220;border:1px solid #243042;color:#e5e7eb;font:600 12px var(--mono);letter-spacing:.8px}
+    .btn{appearance:none;padding:10px 12px;border-radius:10px;border:1px solid #243042;background:#0e1726;color:#dbeafe;cursor:pointer}
+    .btn:hover{filter:brightness(1.1)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .hint{font-size:12px;color:var(--muted)}
+    .kbd{font:12px var(--mono);background:#0b1220;border:1px solid #253044;border-radius:6px;padding:2px 6px;color:#9fb6d1}
+
+    .table{width:100%;border-collapse:collapse;font-family:var(--mono)}
+    .table th,.table td{border-bottom:1px solid #1f2937;padding:8px 10px;text-align:left}
+    .table th{color:#a7c3e6;font-weight:600}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font:12px var(--mono);border:1px solid #223048}
+    .pill.good{color:#085c40;border-color:#115e59;background:rgba(16,185,129,.08)}
+    .pill.bad{color:#6d3333;border-color:#7f1d1d;background:rgba(248,113,113,.08)}
+    .pill.warn{color:#836314;border-color:#78350f;background:rgba(251,191,36,.08)}
+
+    .settings .row label{font-size:12px;color:#9fb6d1}
+    .settings .btn{font-size:12px;padding:6px 10px;border-radius:8px}
+    .settings input[type="number"], .settings select, .settings input[type="checkbox"]{accent-color:#60a5fa}
+
+    .statusbar{display:flex;gap:10px;align-items:center}
+    progress{width:100%;height:10px;border-radius:999px;overflow:hidden;background:#0b1220;border:1px solid #243042}
+    progress::-webkit-progress-bar{background:#0b1220}
+    progress::-webkit-progress-value{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+
+    .foot{padding:10px 14px;border-top:1px dashed #1f2937;color:#9fb6d1;font-size:12px;display:flex;justify-content:space-between;align-items:center}
+
+    /* Stealth: hide game-y words */
+    [data-stealth="on"] .game-word{display:none}
+    [data-stealth="on"] title{content:"KPI Console — Ops Monitor"}
+    .ghost{opacity:.7}
+
+    .toast{position:fixed;right:14px;bottom:14px;background:#0b1220;border:1px solid #243042;color:#cbd5e1;padding:10px 12px;border-radius:10px;box-shadow:var(--shadow);opacity:0;transform:translateY(6px);transition:.2s}
+    .toast.show{opacity:1;transform:translateY(0)}
+
+    /* Digit palette */
+    .digitbar{display:block;margin-top:6px}
+    .digit{ display:inline-block; padding:0 4px; border:none; background:transparent; color:#9fb6d1; font:600 12px var(--mono); user-select:none; transition:.12s; cursor:pointer }
+    .digit.off{ color:#0b0f14 }
+    .digit:not(.off):hover{ filter:brightness(1.12); text-decoration:underline }
+
+    /* Win styles */
+    .win .topbar{ border-bottom-color:#14532d; background:linear-gradient(180deg,rgba(6,78,59,.2),rgba(10,15,24,.6));}
+    .win #panel-input{ border-color:#14532d; box-shadow:0 0 0 1px rgba(16,185,129,.35), var(--shadow);}
+    .table tr.ok td { background:rgba(16,185,129,.08); }
+    .winbar{ display:none; margin-top:8px; padding:10px 12px; border-radius:10px; border:1px solid #115e59; background:rgba(16,185,129,.08); color:#a7f3d0; font:600 13px; }
+    .win .winbar{ display:block; }
+    .pulse{ animation:pulse 1.2s infinite; }
+    @keyframes pulse{ 0%{ box-shadow:0 0 0 0 rgba(96,165,250,.45);} 70%{ box-shadow:0 0 0 10px rgba(96,165,250,0);} 100%{ box-shadow:0 0 0 0 rgba(96,165,250,0);} }
+    
+    /* Presets & Theme */
+    :root{ --accent2:#93c5fd; }
+    [data-preset="jkdl"]{ --accent:#67adaf; --accent2:#ffffff; }
+    [data-preset="forest"]{ --accent:#22c55e; --accent2:#86efac; }
+    [data-preset="ocean"]{ --accent:#06b6d4; --accent2:#67e8f9; }
+    [data-preset="amber"]{ --accent:#f59e0b; --accent2:#fcd34d; }
+    [data-preset="magenta"]{ --accent:#e879f9; --accent2:#f0abfc; }
+    [data-preset="mono"]{ --accent:#9ca3af; --accent2:#cbd5e1; }
+
+    /* Light theme overrides */
+    [data-theme="light"] body{ background:radial-gradient(1200px 1200px at 80% -10%, #edf2f7 0%, #f8fafc 60%), #ffffff; color:#111827; }
+    [data-theme="light"] .side{ background:linear-gradient(180deg,#f8fafc,#eef2ff); border-right-color:#e5e7eb; }
+    [data-theme="light"] .topbar{ border-bottom-color:#e5e7eb; background:rgba(255,255,255,.85); }
+    [data-theme="light"] .topbar .title{ color:#0f172a; }
+    [data-theme="light"] .card{ background:linear-gradient(180deg,#ffffff,#f8fafc); border-color:#e5e7eb; }
+    [data-theme="light"] .input{ background:#ffffff; border-color:#d1d5db; color:#111827; }
+    [data-theme="light"] .btn{ background:#ffffff; border-color:#cbd5e1; color:#1f2937; }
+    [data-theme="light"] .btn:hover{ background:#f3f4f6; }
+    [data-theme="light"] .table th,[data-theme="light"] .table td{ border-bottom-color:#e5e7eb; }
+    [data-theme="light"] .digit{ background:transparent; border:none; color:#374151; }
+    [data-theme="light"] .digit.off{ color:#e5e7eb; }
+    [data-theme="light"] .toast{ background:#ffffff; border-color:#e5e7eb; color:#111827; }
+    [data-theme="light"] .brand h1{ color:#0f172a; }
+    [data-theme="light"] .nav a{ color:#1f2937; }
+    [data-theme="light"] .nav a.active, [data-theme="light"] .nav a:hover{ background:#e2e8f0; border-color:#cbd5e1; }
+    [data-theme="light"] .hint{ color:#6b7280; }
+
+    /* Sidebar collapse */
+    .app.collapsed{ grid-template-columns:1fr; }
+    .app.collapsed .side{ display:none; }
+
+  
+    /* Light polish + buttons & headings */
+    [data-theme="light"] .nav a{ color:#1f2937; }
+    [data-theme="light"] .nav a.active, [data-theme="light"] .nav a:hover{ background:#e5e7eb; border-color:#cbd5e1; }
+    [data-theme="light"] .card h2{ color:#1f2937; }
+    [data-theme="light"] .stealth-toggle, [data-theme="light"] .btn{ background:#f9fafb; border-color:#cbd5e1; color:#111827; }
+    [data-theme="light"] .stealth-toggle:hover, [data-theme="light"] .btn:hover{ background:#f3f4f6; }
+    .stealth-toggle:focus-visible, .btn:focus-visible{ outline:none; box-shadow:0 0 0 2px var(--accent2); }
+    [data-theme="light"] .digit{ color:#1f2937; }
+
+    /* S/B/O pill overrides per preset (JKDL는 그대로 둠) */
+    [data-preset="forest"] .pill.good{ color:#166534; border-color:#166534; background:rgba(34,197,94,.12); }
+    [data-preset="forest"] .pill.warn{ color:#854d0e; border-color:#854d0e; background:rgba(245,158,11,.12); }
+    [data-preset="forest"] .pill.bad{ color:#7f1d1d; border-color:#7f1d1d; background:rgba(248,113,113,.12); }
+
+    [data-preset="ocean"] .pill.good{ color:#115e59; border-color:#115e59; background:rgba(45,212,191,.12); }
+    [data-preset="ocean"] .pill.warn{ color:#1e40af; border-color:#1e40af; background:rgba(59,130,246,.12); }
+    [data-preset="ocean"] .pill.bad{ color:#b91c1c; border-color:#b91c1c; background:rgba(248,113,113,.12); }
+
+    [data-preset="amber"] .pill.good{ color:#166534; border-color:#166534; background:rgba(34,197,94,.12); }
+    [data-preset="amber"] .pill.warn{ color:#92400e; border-color:#92400e; background:rgba(245,158,11,.12); }
+    [data-preset="amber"] .pill.bad{ color:#b91c1c; border-color:#b91c1c; background:rgba(248,113,113,.12); }
+
+    [data-preset="magenta"] .pill.good{ color:#6d28d9; border-color:#6d28d9; background:rgba(167,139,250,.14); }
+    [data-preset="magenta"] .pill.warn{ color:#be185d; border-color:#be185d; background:rgba(244,114,182,.14); }
+    [data-preset="magenta"] .pill.bad{ color:#b91c1c; border-color:#b91c1c; background:rgba(248,113,113,.14); }
+
+    [data-preset="mono"] .pill.good{ color:#374151; border-color:#9ca3af; background:rgba(229,231,235,.6); }
+    [data-preset="mono"] .pill.warn{ color:#4b5563; border-color:#9ca3af; background:rgba(229,231,235,.6); }
+    [data-preset="mono"] .pill.bad{ color:#111827; border-color:#9ca3af; background:rgba(229,231,235,.6); }
+  
+    /* Footer legal note (move from floating badge) */
+    .legal{ display:none !important; }
+    .legalnote{ font-size:12px; line-height:1.7; color:var(--muted); }
+    .legalnote b{ color:#cbd5e1; }
+    [data-theme="light"] .legalnote b{ color:#1f2937; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">
+        <div class="logo"></div>
+        <h1>Ops Console</h1>
+      </div>
+      <nav class="nav">
+        <a class="active" href="#">Task Monitor</a>
+        <a href="#">Audit Log</a>
+        <a href="#">KPI Dashboard</a>
+        <a href="#">Integrations</a>
+      </nav>
+      <div style="margin-top:18px;color:#9fb6d1;font-size:12px">
+        <div>Hotkeys</div>
+        <ul style="padding-left:18px;line-height:1.9">
+          <li><span class="kbd">Enter</span> Submit</li>
+          <li><span class="kbd">N</span> New Game</li>
+          <li><span class="kbd">H</span> Hint</li>
+          <li><span class="kbd">B</span> Stealth</li>
+          <li><span class="kbd">↑</span> Recall</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="title">Task Monitor <span class="ghost game-word"> — JikDal</span></div>
+        <div class="meta">
+          <button type="button" id="btnSidebar" class="stealth-toggle" title="[">Sidebar</button>
+          <span id="timer">00:00</span>
+          <button type="button" id="btnTheme" class="stealth-toggle" title="T">Theme: DARK</button>
+          <select id="presetSel" class="stealth-toggle" title="Preset">
+            <option value="jkdl">JKDL</option>
+            <option value="forest">Forest</option>
+            <option value="ocean">Ocean</option>
+            <option value="amber">Amber</option>
+            <option value="magenta">Magenta</option>
+            <option value="mono" selected>Mono</option>
+          </select>
+          <button type="button" id="stealthBtn" class="stealth-toggle" title="B">Stealth: OFF</button>
+        </div>
+      </div>
+
+      <div class="wrap">
+        <section class="card" id="panel-input">
+          <h2>Analyzer <span class="ghost game-word">(Guess)</span></h2>
+          <div class="body grid">
+            <div class="row">
+              <input id="guess" class="input" placeholder="Input" autocomplete="off" inputmode="numeric" />
+              <button type="button" id="btnSubmit" class="btn">Submit</button>
+              <button type="button" id="btnNew" class="btn" title="N">New</button>
+              <button type="button" id="btnCopyLast" class="btn" title="Copy last result">Copy</button>
+            </div>
+            <div class="row">
+              <div class="hint">고유 숫자 <span class="game-word">Strike / Ball / Out</span> # Code : 83 117 114 108 107 101 101</div>
+            </div>
+            <div class="statusbar">
+              <progress id="progress" max="100" value="0"></progress>
+            </div>
+            <div class="digitbar" id="digitBar" aria-label="digits"></div>
+            <div id="winbar" class="winbar" aria-live="polite"></div>
+          </div>
+          <div class="foot">
+            <div>Last: <span id="lastGuess">—</span></div>
+            <div class="ghost">Target: <span id="debugTarget">••••</span></div>
+          </div>
+        </section>
+
+        <section class="card settings" id="panel-settings">
+          <h2>Configuration</h2>
+          <div class="body grid">
+            <div class="row">
+              <label style="flex:0 0 120px">Digits</label>
+              <select id="digits" class="input" style="max-width:120px">
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+            <div class="row">
+              <label style="flex:0 0 120px">Allow 0</label>
+              <select id="allowZero" class="input" style="max-width:120px">
+                <option value="no">No</option>
+                <option value="yes" selected>Yes</option>
+              </select>
+            </div>
+            <div class="row">
+              <label style="flex:0 0 120px">Unique digits</label>
+              <select id="unique" class="input" style="max-width:120px">
+                <option value="yes" selected>Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            <div class="row">
+              <button type="button" id="btnHint" class="btn" title="H">Hint</button>
+              <button type="button" id="btnExport" class="btn">Export CSV</button>
+              <button type="button" id="btnReveal" class="btn">Reveal</button>
+              <button type="button" id="btnReset" class="btn">Reset Defaults</button>
+            </div>
+            <div class="hint">AngSik</div>
+          </div>
+        </section>
+
+        <section class="card" style="grid-column:1 / -1">
+          <h2>Audit Log <span class="ghost game-word">(History)</span></h2>
+          <div class="body">
+            <table class="table" id="logTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Input</th>
+                  <th class="game-word">S</th>
+                  <th class="game-word">B</th>
+                  <th class="game-word">O</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="logBody"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card" id="legal-card" style="grid-column:1 / -1">
+          <h2>Notice</h2>
+          <div class="body legalnote">
+            <p><b>무단 배포 금지 / Unauthorized Distribution Prohibited</b><br>
+            본 페이지와 소스 코드는 밀피 직달 회원에 한하여 제공됩니다. 사전 서면 허가 없이 복제, 재배포, 임베딩, 리패키징, 역컴파일, 변형 또는 2차 제공을 금지합니다. 배포가 필요한 경우 반드시 작성자 승인을 받으세요. 호스팅된 URL 공유는 허용되나, 파일 자체의 재호스팅은 금지합니다. © 2025 AngSik / SL.</p>
+            <p>This page and its source are provided strictly to JKDL. Any reproduction, redistribution, embedding, repackaging, reverse engineering, modification, or secondary provision without prior written consent is prohibited. Linking to the hosted URL is allowed; re-hosting the files themselves is not permitted. © 2025 AngSik / SL.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast">Copied.</div>
+
+  <script>
+  (function(){
+    const el = sel => document.querySelector(sel);
+    const els = sel => Array.from(document.querySelectorAll(sel));
+
+    // State
+    let target = [];
+    let startedAt = 0, timerId = null, tick = 0;
+    let tries = [];
+    let lastInput = "";
+    let won = false;
+
+    // Elements
+    const $guess = el('#guess');
+    const $submit = el('#btnSubmit');
+    const $new = el('#btnNew');
+    const $digits = el('#digits');
+    const $allowZero = el('#allowZero');
+    const $unique = el('#unique');
+    const $log = el('#logBody');
+    const $progress = el('#progress');
+    const $timer = el('#timer');
+    const $last = el('#lastGuess');
+    const $debug = el('#debugTarget');
+    const $hint = el('#btnHint');
+    const $export = el('#btnExport');
+    const $reveal = el('#btnReveal');
+    const $stealth = el('#stealthBtn');
+    const $digitBar = el('#digitBar');
+    const $winbar = el('#winbar');
+    const $app = el('.app');
+    const $btnTheme = el('#btnTheme');
+    const $presetSel = el('#presetSel');
+    const $btnSidebar = el('#btnSidebar');
+    const $btnCopyLast = el('#btnCopyLast');
+    // Owner gate with SHA-256 (store only hash)
+    const OWNER_HASH = 'badff48e443ae9055b2af7b78f63225c29f0ca91970ff9c0ecf757722cc48afb'; // sha256('Surl')
+    let OWNER = false;
+    async function sha256Hex(str){
+      const enc = new TextEncoder();
+      const buf = await crypto.subtle.digest('SHA-256', enc.encode(str));
+      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    async function initOwner(){
+      try{
+        const usp = new URLSearchParams(location.search);
+        const key = usp.get('key');
+        if(key){
+          const h = await sha256Hex(key);
+          if(h===OWNER_HASH){ localStorage.setItem('nbOwner','1'); }
+          history.replaceState({}, document.title, location.pathname);
+        }
+        OWNER = localStorage.getItem('nbOwner')==='1';
+      }catch(e){ OWNER=false; }
+    }
+    const DIGITS = '0123456789'.split('');
+    let digitState = {};
+    const $btnReset = el('#btnReset');
+    const DEFAULTS = { digits: 3, allowZero: 'yes', unique: 'yes', stealth: false, theme: 'dark', preset: 'mono', collapsed: false };
+    function loadConfig(){
+      try{ return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('nbConfig')||'{}')); }
+      catch(e){ return {...DEFAULTS}; }
+    }
+    let CONFIG = loadConfig();
+    function saveConfig(){ localStorage.setItem('nbConfig', JSON.stringify(CONFIG)); }
+    function applyConfigToUI(){
+      $digits.value = String(CONFIG.digits);
+      $allowZero.value = CONFIG.allowZero;
+      $unique.value = CONFIG.unique;
+      document.documentElement.setAttribute('data-stealth', CONFIG.stealth ? 'on':'off');
+      document.documentElement.setAttribute('data-theme', CONFIG.theme || 'dark');
+      document.documentElement.setAttribute('data-preset', (CONFIG.preset || 'mono'));
+      if($stealth) $stealth.textContent = 'Stealth: ' + (CONFIG.stealth ? 'ON':'OFF');
+      if($btnTheme) $btnTheme.textContent = 'Theme: ' + (CONFIG.theme||'dark').toUpperCase();
+      if($presetSel) $presetSel.value = (CONFIG.preset || 'mono');
+      if($app) $app.classList.toggle('collapsed', !!CONFIG.collapsed);
+    }  // d -> 'off'|'on'|undefined
+
+    function randInt(n){ return Math.floor(Math.random()*n); }
+
+    function startTimer(){
+      if(timerId) return;
+      startedAt = Date.now();
+      timerId = setInterval(()=>{
+        const sec = Math.floor((Date.now()-startedAt)/1000);
+        const mm = String(Math.floor(sec/60)).padStart(2,'0');
+        const ss = String(sec%60).padStart(2,'0');
+        $timer.textContent = mm+":"+ss;
+        $progress.value = Math.min(100, tries.length* (100/20));
+      }, 300);
+    }
+
+    function newTarget(){
+      const n = parseInt($digits.value,10);
+      const allow0 = $allowZero.value === 'yes';
+      const unique = $unique.value === 'yes';
+      let pool = ['0','1','2','3','4','5','6','7','8','9'];
+      if(!allow0) pool = pool.slice(1);
+      let arr = [];
+      if(unique){
+        while(arr.length < n){
+          const pick = pool[randInt(pool.length)];
+          if(arr.length===0 && pick==='0' && !allow0) continue; // leading zero guard when not allowed
+          if(!arr.includes(pick)) arr.push(pick);
+        }
+      }else{
+        while(arr.length < n){
+          const pick = pool[randInt(pool.length)];
+          if(arr.length===0 && pick==='0' && !allow0) continue;
+          arr.push(pick);
+        }
+      }
+      return arr;
+    }
+
+    function start(){
+      target = newTarget();
+      tries = [];
+      $log.innerHTML = '';
+      startedAt = Date.now();
+      tick = 0;
+      clearInterval(timerId);
+      timerId = null;
+      $timer.textContent = '00:00';
+      $progress.value = 0;
+      $last.textContent = '—';
+      $debug.textContent = target.map(()=> '•').join('');
+      $guess.value = '';
+      $guess.focus();
+      resetDigitState();
+      updateDigitClasses();
+      won = false;
+      document.body.classList.remove('win');
+      if($winbar) $winbar.textContent='';
+      $guess.disabled = false;
+      $submit.disabled = false;
+      $new.classList.remove('pulse');
+    }
+
+    function parseGuess(text){
+      const clean = (text||'').replace(/\D/g,'');
+      const n = target.length;
+      if(clean.length !== n) return null;
+      // uniqueness check if required
+      if($unique.value==='yes'){
+        const set = new Set(clean.split(''));
+        if(set.size!==clean.length) return null;
+      }
+      if($allowZero.value==='no' && clean[0]==='0') return null;
+      return clean.split('');
+    }
+
+    function score(guessArr){
+      let S=0,B=0;
+      for(let i=0;i<guessArr.length;i++){
+        if(guessArr[i]===target[i]) S++; else if(target.includes(guessArr[i])) B++;
+      }
+      const O = guessArr.length - (S+B);
+      return {S,B,O};
+    }
+
+    function addRow(input, {S,B,O}){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${tries.length}</td>
+        <td style="font-weight:600">${input}</td>
+        <td class="game-word"><span class="pill good">${S} S</span></td>
+        <td class="game-word"><span class="pill warn">${B} B</span></td>
+        <td class="game-word"><span class="pill bad">${O} O</span></td>
+        <td>${new Date().toLocaleTimeString()}</td>`;
+      $log.prepend(tr);
+    }
+
+    function tryToText(t){ return `${t.input} — S:${t.S} B:${t.B} O:${t.O}`; }
+
+    async function copyText(text){
+      try{ await navigator.clipboard.writeText(text); toast('Copied'); }
+      catch(e){
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); ta.remove(); toast('Copied');
+      }
+    }
+
+    function submit(){
+      const g = parseGuess($guess.value);
+      lastInput = $guess.value;
+      if(!g){
+        toast('Error');
+        return;
+      }
+      const sc = score(g);
+      // Knowledge rules:
+      // 1) Full OUT -> dim the guessed digits.
+      // 2) Full IN (O=0) AND unique mode -> dim ALL digits not in guess (complement elimination).
+      if(sc.S === 0 && sc.B === 0){
+        g.forEach(d=>{ digitState[d] = 'off'; });
+      } else {
+        // presence marking (no dim)
+        g.forEach(d=>{ if(target.includes(d) && digitState[d] !== 'off') digitState[d] = 'on'; });
+        if(sc.O === 0 && $unique.value === 'yes'){
+          DIGITS.forEach(d=>{ if(!g.includes(d)) digitState[d] = 'off'; });
+          toast('S + B = Digits → Exclude Other Num');
+        }
+      }
+      updateDigitClasses();
+      tries.push({input:g.join(''), ...sc, t:Date.now()});
+      addRow(g.join(''), sc);
+      $last.textContent = g.join('');
+      $guess.value = '';
+      $guess.focus();
+
+      if(sc.S === target.length){
+        onWin(sc);
+      }
+    }
+
+    function hint(){
+      if(tries.length===0){
+        // reveal one digit set
+        const idx = randInt(target.length);
+        toast(`Hint: ${idx+1}번째 자리는 {${target[idx]}} 중 1개`);
+        return;
+      }
+      // compute forbidden set from history
+      const seen = new Set(tries.map(t=>t.input).join('').split(''));
+      const maybe = [...'0123456789'].filter(d=>!seen.has(d));
+      toast('Not Yet: '+ maybe.join(' '));
+    }
+
+    function exportCSV(){
+      const rows = [['#','Input','S','B','O','Time']].concat(
+        tries.map((t,i)=>[i+1,t.input,t.S,t.B,t.O,new Date(t.t).toISOString()])
+      );
+      const csv = rows.map(r=>r.join(',')).join('\n');
+      const blob = new Blob([csv],{type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'audit_log.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function reveal(){
+      if(!OWNER){ toast('Permission required'); return; }
+      $debug.textContent = target.join('');
+      toast('Revealed Answer');
+    }
+
+    function toggleStealth(){
+      const on = document.documentElement.getAttribute('data-stealth')==='on';
+      const next = !on;
+      document.documentElement.setAttribute('data-stealth', next? 'on':'off');
+      $stealth.textContent = 'Stealth: ' + (next? 'ON':'OFF');
+      CONFIG.stealth = next; saveConfig();
+    }
+
+    function toast(msg){
+      const t = el('#toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._h);
+      t._h = setTimeout(()=> t.classList.remove('show'), 1600);
+    }
+
+    function renderDigitBar(){
+      if(!$digitBar) return;
+      $digitBar.innerHTML = DIGITS.map(d=>`<div class="digit" data-d="${d}">${d}</div>`).join('');
+      $digitBar.addEventListener('click',(e)=>{
+        const n = e.target.getAttribute('data-d');
+        if(!n) return;
+        $guess.value += n;
+        startTimer();
+        $guess.focus();
+      });
+    }
+
+    function resetDigitState(){
+      digitState = {};
+      updateDigitClasses();
+    }
+
+    function updateDigitClasses(){
+      if(!$digitBar) return;
+      els('.digit').forEach(div=>{
+        const d = div.getAttribute('data-d');
+        div.classList.toggle('off', digitState[d]==='off');
+      });
+    }
+
+    function onWin(sc){
+      clearInterval(timerId); timerId=null;
+      won = true;
+      document.body.classList.add('win');
+      $debug.textContent = target.join('');
+      $progress.value = 100;
+      $guess.disabled = true;
+      $submit.disabled = true;
+      $new.classList.add('pulse');
+      const sec = Math.floor((Date.now()-startedAt)/1000);
+      const mm = String(Math.floor(sec/60)).padStart(2,'0');
+      const ss = String(sec%60).padStart(2,'0');
+      const summary = `✔ Solved — S:${sc.S} B:${sc.B} • ${tries.length} tries • ${mm}:${ss} • Answer: ${target.join('')}`;
+      if($winbar){
+        const summaryHTML = `${summary}`;
+        let btns = `<button id=\"btnCopyWin\" class=\"btn\">Copy Summary</button>`;
+        if(OWNER) btns += ` <button id=\"btnCopyAns\" class=\"btn\">Copy Answer</button>`;
+        $winbar.innerHTML = `${summaryHTML} 
+ <div style=\"margin-top:8px;display:flex;gap:8px;flex-wrap:wrap\">${btns}</div>`;
+        const $btnCW = el('#btnCopyWin');
+        const $btnCA = el('#btnCopyAns');
+        $btnCW && $btnCW.addEventListener('click', ()=> copyText(summary));
+        if(OWNER) $btnCA && $btnCA.addEventListener('click', ()=> copyText(target.join('')));
+      }
+      if($log.firstElementChild) $log.firstElementChild.classList.add('ok');
+      toast('Solve! N = New');
+    }
+
+    // Events
+    $submit.addEventListener('click', submit);
+    $new.addEventListener('click', start);
+    $hint.addEventListener('click', hint);
+    $export.addEventListener('click', exportCSV);
+    $reveal.addEventListener('click', reveal);
+    $stealth.addEventListener('click', toggleStealth);
+
+    // Persist config on change
+    $digits.addEventListener('change', ()=>{ CONFIG.digits = parseInt($digits.value,10); saveConfig(); });
+    $allowZero.addEventListener('change', ()=>{ CONFIG.allowZero = $allowZero.value; saveConfig(); });
+    $unique.addEventListener('change', ()=>{ CONFIG.unique = $unique.value; saveConfig(); });
+    if($btnReset){
+      $btnReset.addEventListener('click', ()=>{
+        localStorage.removeItem('nbConfig');
+        CONFIG = {...DEFAULTS};
+        applyConfigToUI();
+        start();
+        toast('Default');
+      });
+    }
+
+    // Theme / Preset / Sidebar handlers
+    if($btnTheme){
+      $btnTheme.addEventListener('click', ()=>{
+        CONFIG.theme = (CONFIG.theme==='dark') ? 'light' : 'dark';
+        saveConfig();
+        applyConfigToUI();
+      });
+    }
+    if($presetSel){
+      $presetSel.addEventListener('change', ()=>{
+        CONFIG.preset = $presetSel.value;
+        saveConfig();
+        applyConfigToUI();
+      });
+    }
+    if($btnSidebar){
+      $btnSidebar.addEventListener('click', ()=>{
+        CONFIG.collapsed = !CONFIG.collapsed;
+        saveConfig();
+        applyConfigToUI();
+      });
+    }
+
+
+    // Copy last result button
+    if($btnCopyLast){
+      $btnCopyLast.addEventListener('click', ()=>{
+        if(tries.length===0){ toast('No result yet'); return; }
+        const t = tries[tries.length-1];
+        copyText(tryToText(t));
+      });
+    }
+
+    // Click row to copy that result
+    if($log){
+      $log.addEventListener('click', (e)=>{
+        const tr = e.target.closest('tr');
+        if(!tr) return;
+        const idx = Array.from($log.children).indexOf(tr);
+        // log is prepended, so reverse index
+        const t = tries[tries.length - 1 - idx];
+        if(!t) return;
+        copyText(tryToText(t));
+      });
+    }
+
+    $guess.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter') submit();
+      if(e.key==='ArrowUp'){ $guess.value = lastInput; e.preventDefault(); }
+    });
+    $guess.addEventListener('input', ()=>{ if($guess.value.length && !timerId) startTimer(); });
+
+    window.addEventListener('keydown', (e)=>{
+      if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){
+        if(e.key==='Escape'){ document.activeElement.blur();}
+      }
+      if(e.key.toLowerCase()==='n') start();
+      if(e.key.toLowerCase()==='h') hint();
+      if(e.key.toLowerCase()==='b') toggleStealth();
+      if(e.key.toLowerCase()==='t' && $btnTheme) $btnTheme.click();
+      if(e.key==='[' && $btnSidebar) $btnSidebar.click();
+      if(e.ctrlKey && e.key.toLowerCase()==='c' && tries.length){
+        // Ctrl+C copies last result for convenience
+        copyText(tryToText(tries[tries.length-1]));
+      }
+    });
+
+    // Init
+    initOwner();
+    applyConfigToUI();
+    document.querySelectorAll('.nav a').forEach(a=> a.title = a.textContent.trim());
+    renderDigitBar();
+    start();
+  })();
+  </script>
+</body>
+</html>
